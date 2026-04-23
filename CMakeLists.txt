@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 cmake_policy(SET CMP0135 NEW)
 
+
 if(MSVC)
   set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Available configuration types to select")
 endif()
@@ -18,6 +19,7 @@ else()
     HOMEPAGE_URL "https://github.com/ptal/turbo"
     LANGUAGES CXX)
 endif()
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 option(LOCAL_DEPS "LOCAL_DEPS" OFF)
 option(TURBO_VERBOSE "Compile with verbose output" ON)
 option(WITH_ASAN "Compile with the Address Sanitizer to check for memory corruption errors" OFF)
@@ -64,15 +66,29 @@ endif()
 
 FetchContent_MakeAvailable(lala_parsing lala_pc lala_power)
 
-# Turbo executable
+# pybind11 for python API
+# Fetch pybind11
+include(FetchContent)
+
+FetchContent_Declare(
+  pybind11
+  GIT_REPOSITORY https://github.com/pybind/pybind11.git
+  GIT_TAG v2.11.1
+)
+
+FetchContent_MakeAvailable(pybind11)
+pybind11_add_module(turbo_python src/python_bind.cpp src/incremental_turbo.cpp src/config.cpp)
+find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+
+# Turbo python bind
 
 if(GPU)
-  set_source_files_properties(src/turbo.cpp src/config.cpp PROPERTIES LANGUAGE CUDA)
+  set_source_files_properties(src/python_bind.cpp src/incremental_turbo.cpp src/config.cpp PROPERTIES LANGUAGE CUDA)
 endif()
 
-add_executable(turbo src/turbo.cpp src/config.cpp)
-target_include_directories(turbo PRIVATE include)
-target_compile_options(turbo PRIVATE
+#add_executable(python_turbo src/python_bind.cpp src/incremental_turbo.cpp src/config.cpp)
+target_include_directories(turbo_python PRIVATE include)
+target_compile_options(turbo_python PRIVATE
     "$<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CUDA_COMPILER_ID:NVIDIA>>:SHELL:--ptxas-options=-v>"
     "$<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CUDA_COMPILER_ID:NVIDIA>>:--keep$<$<BOOL:${TURBO_VERBOSE}>:;--verbose>>"
     "$<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CUDA_COMPILER_ID:NVIDIA>,$<CONFIG:Debug>>:-ftemplate-backtrace-limit=0>"
@@ -85,32 +101,32 @@ target_compile_options(turbo PRIVATE
     "$<$<AND:$<BOOL:${WITH_ASAN}>,$<COMPILE_LANGUAGE:CUDA>,$<CUDA_COMPILER_ID:Clang>>:-fsanitize=address>"
     "$<$<AND:$<BOOL:${WITH_ASAN}>,$<COMPILE_LANGUAGE:CUDA>,$<CUDA_COMPILER_ID:NVIDIA>>:SHELL:--compiler-options -fsanitize=address>"
 )
-target_compile_definitions(turbo PRIVATE DISABLE_FULL_GPU_SOLVING)
-target_compile_definitions(turbo PRIVATE DISABLE_HYBRID_GPU_SOLVING)
+target_compile_definitions(turbo_python PRIVATE DISABLE_FULL_GPU_SOLVING)
+target_compile_definitions(turbo_python PRIVATE DISABLE_HYBRID_GPU_SOLVING)
 # target_compile_definitions(turbo PRIVATE REDUCE_PTX_SIZE)
-target_compile_options(turbo PRIVATE "$<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CUDA_COMPILER_ID:NVIDIA>>:-lineinfo>")
+target_compile_options(turbo_python PRIVATE "$<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CUDA_COMPILER_ID:NVIDIA>>:-lineinfo>")
 
-target_compile_definitions(turbo PRIVATE CUDA_THREADS_PER_BLOCK=256)
-target_compile_definitions(turbo PRIVATE TURBO_ITV_BITS=32)
+target_compile_definitions(turbo_python PRIVATE CUDA_THREADS_PER_BLOCK=256)
+target_compile_definitions(turbo_python PRIVATE TURBO_ITV_BITS=32)
 
 if(TURBO_IPC_ABSTRACT_DOMAIN)
-  target_compile_definitions(turbo PRIVATE TURBO_IPC_ABSTRACT_DOMAIN)
+  target_compile_definitions(turbo_python PRIVATE TURBO_IPC_ABSTRACT_DOMAIN)
 endif()
 
 if(TURBO_NO_ENTAILED_PROP_REMOVAL)
-  target_compile_definitions(turbo PRIVATE TURBO_NO_ENTAILED_PROP_REMOVAL)
+  target_compile_definitions(turbo_python PRIVATE TURBO_NO_ENTAILED_PROP_REMOVAL)
 endif()
 
 if(WITH_XCSP3PARSER)
-  target_compile_definitions(turbo PRIVATE WITH_XCSP3PARSER)
+  target_compile_definitions(turbo_python PRIVATE WITH_XCSP3PARSER)
 endif()
 
 if(NO_CONCURRENT_MANAGED_MEMORY)
-  target_compile_definitions(turbo PRIVATE NO_CONCURRENT_MANAGED_MEMORY)
+  target_compile_definitions(turbo_python PRIVATE NO_CONCURRENT_MANAGED_MEMORY)
 endif()
 
-target_link_libraries(turbo PRIVATE lala_parsing lala_pc lala_power)
-target_link_options(turbo PRIVATE
+target_link_libraries(turbo_python PRIVATE lala_parsing lala_pc lala_power)
+target_link_options(turbo_python PRIVATE
     $<$<AND:$<BOOL:${WITH_ASAN}>,$<CXX_COMPILER_ID:GNU>>:-fsanitize=address;-static-libasan>
     $<$<AND:$<BOOL:${WITH_ASAN}>,$<CXX_COMPILER_ID:Clang>>:-fsanitize=address>
     $<$<AND:$<BOOL:${WITH_ASAN}>,$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:MSVC>>:/INCREMENTAL:NO>
@@ -122,8 +138,16 @@ target_link_options(turbo PRIVATE
 )
 
 if(MSVC)
-  set_target_properties(turbo PROPERTIES VS_USER_PROPS "${CMAKE_CURRENT_SOURCE_DIR}/vs.props")
+  set_target_properties(turbo_python PROPERTIES VS_USER_PROPS "${CMAKE_CURRENT_SOURCE_DIR}/vs.props")
 endif()
+
+# install
+set_target_properties(turbo_python PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+)
+install(TARGETS turbo_python
+    LIBRARY DESTINATION .
+)
 
 # Documentation
 if(TURBO_BUILD_DOC)

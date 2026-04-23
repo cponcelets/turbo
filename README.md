@@ -1,54 +1,41 @@
-# TURBO
+# TURBO _ Python
 
-Turbo aims to be a constraint solver entirely on GPUs.
-Its theoretical parallel model is described in this paper [AAAI 2022](https://ptal.github.io/papers/aaai2022.pdf).
-The (less theoretical) GPU-based solving algorithm (Turbo v1.2.8) is described in this paper [AAAI 2026](https://ptal.github.io/papers/aaai2026.pdf) with a 10 minutes explanation video [here](https://uniluxembourg-my.sharepoint.com/:v:/g/personal/pierre_talbot_uni_lu/IQBiZ8FDb9lqR6ELEXGWUJHcAWlifC56lr0crV23rpp8mZ0?e=uwNYO6&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJTdHJlYW1XZWJBcHAiLCJyZWZlcnJhbFZpZXciOiJTaGFyZURpYWxvZy1MaW5rIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXcifX0%3D).
-Turbo is part of a larger project called [Lattice Land](https://github.com/lattice-land).
-I write about Turbo in a [technical journal](https://lattice-land.github.io/1-turbo.html) where you can learn about the specifics of this solver, and our attempts to make it faster.
+`Turbo_python` is a build making turbo available in python.
+It uses [pybinb11](https://github.com/pybind/pybind11) and follows [cmake example](https://github.com/pybind/cmake_example).
 
 ### Dependencies
 
+[Turbo](https://github.com/ptal/turbo)'s dependencies:
 * Cuda compiler `nvcc` (>= 12.0).
 * [libxml2](http://xmlsoft.org/)
 * CMake (>= 3.27)
 * Doxygen
 
-The other dependencies will be pulled and compiled automatically by CMake.
+Python:
+* Python > 10.0
+* venv
 
 ### Configure, compile and run
 
-You can first clone this repository, and then `git checkout` the latest released tag to ensure more stability.
-The following command will configure and compile Turbo for GPU for the GPU architecture of your computer (native architecture).
-
-```
-cmake --workflow --preset gpu-release --fresh
-./build/gpu-release/turbo -s -v -i -t 20000 benchmarks/example_wordpress7_500.fzn
-```
-
-Other compilation builds are also available:
-
-* GPU Debug version: `cmake --workflow --preset gpu-debug --fresh`
-* CPU Debug version: `cmake --workflow --preset cpu-debug --fresh`
-* CPU Release version: `cmake --workflow --preset cpu-release --fresh`
-
-Alternatively, you can use these commands without presets and workflow (it is useful to set additional compilation flags not provided by the presets):
-
-```
-cmake -DCMAKE_BUILD_TYPE=Release -DGPU=ON -DREDUCE_PTX_SIZE=ON -DCMAKE_VERBOSE_MAKEFILE=ON -Bbuild/gpu-release
-cmake --build build/gpu-release
+Set a virtual environment (venv):
+```bash
+python3 -m venv turbo-venv
+source turbo-venv/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install pybind11
 ```
 
-### MiniZinc
-
-The file [turbo.gpu.release.msc](https://github.com/ptal/turbo/blob/v1.1.0/benchmarks/minizinc/turbo.gpu.release.msc) can be copied in your Minizinc configuration directory (on Linux: `~/.minizinc/solvers`).
-You should edit the file and update the paths of `executable` and `mznlib` to match the location of Turbo on your system.
-
-You should be able to run Turbo directly from the [MiniZinc IDE](https://www.minizinc.org/) and from the command line:
-
+Run pip install wih the preset of your choice:
 ```
-minizinc -s -t 60000 --solver turbo.gpu.release benchmarks/mzn-challenge/2022/wordpress/Wordpress7_Offers500.dzn benchmarks/mzn-challenge/2022/wordpress/wordpress.mzn
+CMAKE_PRESET=<my_preset> pip install .
 ```
 
-### Developers
+### Test
 
-Please see [lattice-land](https://github.com/lattice-land/.github).
+Try if everything went well
+```bash
+python tests/test.py
+```
+
+> Note: It seems the timeout is not working and turbo runs forever
+>       If you want to stop it open a new terminal, get turbo's PID (commad `top`) and use `kill -3 <turbo's PID>` 
