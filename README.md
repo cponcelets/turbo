@@ -42,5 +42,7 @@ Try if everything went well
 python tests/test.py
 ```
 
-> Note: It seems the timeout is not working and turbo runs forever
->       If you want to stop it open a new terminal, get turbo's PID (commad `top`) and use `kill -3 <turbo's PID>` 
+> Note:
+> - preset CPU: We are aware of a bug for big model (turbo runs forever)
+>       If you want to stop it open a new terminal, get turbo's PID (commad `top`) and use `kill -3 <turbo's PID>`
+> - preset GPU: For WSL you ll need a patch to allow CUDA working properly (see https://github.com/cponcelets/turbo_llm) 
