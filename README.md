@@ -30,6 +30,11 @@ Run pip install wih the preset of your choice:
 CMAKE_PRESET=<my_preset> pip install .
 ```
 
+Then copy the library into your pip wheels, for example with the preset `cpu-release-local` and `python3.13`:
+```
+cp build/cpu-release-local/turbo_python.cpython-313-x86_64-linux-gnu.so turbo-venv/lib64/python3.13/site-packages/
+```
+
 ### Test
 
 Try if everything went well
