@@ -61,7 +61,7 @@ class CMakeBuild(build_ext):
     	check=True
 	)
 
-        so_files = list(Path(ext.sourcedir, "build", "cpu-release-local").glob("turbo_python*.so"))
+        so_files = list(Path(ext.sourcedir, "build", preset).glob("turbo_python*.so"))
         if not so_files:
             raise RuntimeError("No turbo_python .so found in after build")
 

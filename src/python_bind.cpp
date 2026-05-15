@@ -11,12 +11,16 @@ int solve_wrapper(const std::vector<std::string>& args) {
         c_args.push_back(const_cast<char*>(s.c_str()));
     }
 
-    return solve((int)c_args.size(), c_args.data());
+    int result = solve((int)c_args.size(), c_args.data());
+    cudaDeviceSynchronize();
+    fflush(stdout);
+    fflush(stderr);
+
+    return result;
 }
 
 
 PYBIND11_MODULE(turbo_python, m) {
 	m.doc() = "Turbo Solver python API";
-	m.def("solve", &solve_wrapper, "Turbo solve",
-		py::arg("args"));
+	m.def("solve", &solve_wrapper, "Turbo solve", py::arg("args"));
 }
