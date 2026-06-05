@@ -26,8 +26,7 @@ pip install pybind11
 ```
 
 The implementation works for local releases and expects to find lattice-land repos in the parent folder.
-
-See [https://github.com/lattice-land/.github](https://github.com/lattice-land/.github#getting-started).
+More precisely, you need to clone the repo following [https://github.com/lattice-land/.github](https://github.com/lattice-land/.github#getting-started) and use ` git clone --recursive git@github.com:cponcelets/turbo.git` following by `cd turbo && git checkout turbo_python && git pull`.
 
 Then applies the patches wiht the next commands: 
 ```bash
