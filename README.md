@@ -17,6 +17,19 @@ Python:
 
 ### Configure, compile and run
 
+#### lattice-land 
+The implementation works for local releases and expects to find lattice-land repos in the parent folder.
+More precisely, you need to clone the repo following [https://github.com/lattice-land/.github](https://github.com/lattice-land/.github#getting-started) and use ` git clone --recursive git@github.com:cponcelets/turbo.git` following by `cd turbo && git checkout turbo_python && git pull`.
+
+#### Python
+
+In the turbo folder and apply the patches with the next commands: 
+```bash
+git -C ../cuda-battery apply patches/cuda-battery_to_string.patch
+git -C ../lala-core apply patches/lala-core_to_string.patch
+git -C ../lala-parsing apply patches/lala-parsing_to_string.patch
+```
+
 Set a virtual environment (venv):
 ```bash
 python3 -m venv turbo-venv
@@ -25,7 +38,7 @@ pip install --upgrade pip setuptools wheel
 pip install pybind11
 ```
 
-Run pip install wih the preset of your choice:
+Now you can run pip install with the preset (`cpu-release-local` or `gpu-release-local`):
 ```
 CMAKE_PRESET=<my_preset> pip install .
 ```
