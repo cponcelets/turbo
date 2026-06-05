@@ -25,7 +25,18 @@ pip install --upgrade pip setuptools wheel
 pip install pybind11
 ```
 
-Run pip install wih the preset of your choice:
+The implementation works for local releases and expects to find lattice-land repos in the parent folder.
+
+See [https://github.com/lattice-land/.github](https://github.com/lattice-land/.github#getting-started).
+
+Then applies the patches wiht the next commands: 
+```bash
+cd ../cuda-battery/ && git apply ../turbo/patches/cuda-battery_to_string.patch
+cd ../lala-core/ && git apply ../turbo/patches/lala-core_to_string.patch
+cd ../lala-parsing/ && git apply ../turbo/patches/lala-parsing_to_string.patch
+```
+
+Now you can run pip install with the preset (`cpu-release-local` or `gpu-release-local`):
 ```
 CMAKE_PRESET=<my_preset> pip install .
 ```
