@@ -77,16 +77,16 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(pybind11)
-pybind11_add_module(turbo_python src/python_bind.cpp src/incremental_turbo.cpp src/config.cpp)
+pybind11_add_module(turbo_python src/python_bind.cpp src/python_instance.cpp src/config.cpp)
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 
 # Turbo python bind
 
 if(GPU)
-  set_source_files_properties(src/python_bind.cpp src/incremental_turbo.cpp src/config.cpp PROPERTIES LANGUAGE CUDA)
+  set_source_files_properties(src/python_bind.cpp src/python_instance.cpp src/config.cpp PROPERTIES LANGUAGE CUDA)
 endif()
 
-#add_executable(python_turbo src/python_bind.cpp src/incremental_turbo.cpp src/config.cpp)
+#add_executable(python_turbo src/python_bind.cpp src/python_instance.cpp src/config.cpp)
 target_include_directories(turbo_python PRIVATE include)
 target_compile_options(turbo_python PRIVATE
     "$<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CUDA_COMPILER_ID:NVIDIA>>:SHELL:--ptxas-options=-v>"

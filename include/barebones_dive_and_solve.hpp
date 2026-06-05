@@ -461,15 +461,11 @@ __device__ INLINE void propagate(UnifiedData& unified_data, GridData& grid_data,
 __global__ void reduce_blocks(UnifiedData*, GridData*);
 __global__ void deallocate_global_data(bt::unique_ptr<GridData, bt::global_allocator>*);
 
-void barebones_dive_and_solve(const Configuration<battery::standard_allocator>& config) {
-  if(config.print_intermediate_solutions) {
-    printf("%% WARNING: -arch barebones is incompatible with -i and -a (it cannot print intermediate solutions).\n");
-  }
+void barebones_dive_and_solve(CP<Itv>& cp) {
   auto start = std::chrono::steady_clock::now();
   check_support_managed_memory();
   check_support_concurrent_managed_memory();
   /** We start with some preprocessing to reduce the number of variables and constraints. */
-  CP<Itv> cp(config);
   cp.preprocess();
   if(cp.iprop->is_bot()) {
     cp.print_final_solution();
@@ -1075,7 +1071,7 @@ __global__ void deallocate_global_data(bt::unique_ptr<GridData, bt::global_alloc
 
 #if defined(TURBO_IPC_ABSTRACT_DOMAIN) || !defined(__CUDACC__)
 
-void barebones_dive_and_solve(const Configuration<battery::standard_allocator>& config) {
+void barebones_dive_and_solve(CP<Itv>& cp) {
 #ifdef TURBO_IPC_ABSTRACT_DOMAIN
   std::cerr << "-arch barebones does not support IPC abstract domain." << std::endl;
 #else

@@ -5,15 +5,12 @@
 
 #include "common_solving.hpp"
 
-void cpu_solve(const Configuration<battery::standard_allocator>& config) {
+void cpu_solve(CP<Itv>& cp) {
   auto start = std::chrono::steady_clock::now();
 
-  CP<Itv> cp(config);
   cp.config.or_nodes = 1;
   cp.preprocess();
   if(cp.iprop->is_bot()) {
-    cp.print_final_solution();
-    cp.print_mzn_statistics();
     return;
   }
 
@@ -43,8 +40,6 @@ void cpu_solve(const Configuration<battery::standard_allocator>& config) {
     cp.stats.stop_timer(Timer::SEARCH, start2);
     if(must_prune) { break; }
   }
-  cp.print_final_solution();
-  cp.print_mzn_statistics();
 }
 
 #endif

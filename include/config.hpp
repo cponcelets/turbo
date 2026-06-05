@@ -280,6 +280,6 @@ struct Configuration {
 };
 
 void usage_and_exit(const std::string& program_name);
-Configuration<battery::standard_allocator> parse_args(int argc, char** argv);
+Configuration<battery::standard_allocator> parse_args(const std::vector<std::string>& args);
 
 #endif

@@ -1,26 +1,18 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include "incremental_turbo.hpp"
+#include <pybind11/stl_bind.h>
+#include "python_instance.hpp"
 
-namespace py = pybind11;
-
-int solve_wrapper(const std::vector<std::string>& args) {
-    std::vector<char*> c_args;
-
-    for (const auto& s : args) {
-        c_args.push_back(const_cast<char*>(s.c_str()));
-    }
-
-    int result = solve((int)c_args.size(), c_args.data());
-    cudaDeviceSynchronize();
-    fflush(stdout);
-    fflush(stderr);
-
-    return result;
-}
-
+using namespace pybind11;
 
 PYBIND11_MODULE(turbo_python, m) {
+	using namespace lala;
+    
 	m.doc() = "Turbo Solver python API";
-	m.def("solve", &solve_wrapper, "Turbo solve", py::arg("args"));
+
+    pybind11::class_<PythonInstance>(m, "Turbo")
+    .def(pybind11::init<const std::vector<std::string>&>())
+    .def("solve", &PythonInstance::solve)
+    .def("output", &PythonInstance::output)
+    .def("stats", &PythonInstance::stats);
 }

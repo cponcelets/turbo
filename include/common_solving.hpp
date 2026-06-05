@@ -57,7 +57,7 @@ static std::atomic<bool> got_signal;
 static void (*prev_sigint)(int);
 static void (*prev_sigterm)(int);
 
-void signal_handler(int signum)
+inline void signal_handler(int signum)
 {
   std::signal(SIGINT, signal_handler); // re-arm
   std::signal(SIGTERM, signal_handler); // re-arm
@@ -70,7 +70,7 @@ void signal_handler(int signum)
   }
 }
 
-void block_signal_ctrlc() {
+inline void block_signal_ctrlc() {
   prev_sigint = std::signal(SIGINT, signal_handler);
   prev_sigterm = std::signal(SIGTERM, signal_handler);
 }
