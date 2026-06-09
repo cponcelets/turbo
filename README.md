@@ -25,9 +25,9 @@ More precisely, you need to clone the repo following [https://github.com/lattice
 
 In the turbo folder and apply the patches with the next commands: 
 ```bash
-git -C ../cuda-battery apply patches/cuda-battery_to_string.patch
-git -C ../lala-core apply patches/lala-core_to_string.patch
-git -C ../lala-parsing apply patches/lala-parsing_to_string.patch
+git -C ../cuda-battery apply ../turbo/patches/cuda-battery_to_string.patch
+git -C ../lala-core apply ../turbo/patches/lala-core_to_string.patch
+git -C ../lala-parsing apply ../turbo/patches/lala-parsing_to_string.patch
 ```
 
 Set a virtual environment (venv):
