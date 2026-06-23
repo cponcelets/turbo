@@ -5,6 +5,7 @@ def print_mzn_final_separator(stats):
     if stats['num_solutions'] > 0:
         if stats['exhaustive']:
             print("==========")
+            print("All solution(s) found (", stats['num_solutions'] , ")")
     else:
         assert stats['num_solutions'] == 0
 
@@ -22,7 +23,7 @@ solver.solve()
 
 print_mzn_final_separator(solver.stats())
 print("With:");
-print(solver.output());
+print(solver.best());
 
 print("Stats:");
 pprint(solver.stats());

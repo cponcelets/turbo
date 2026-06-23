@@ -20,7 +20,7 @@ struct PythonInstance {
     //Launch a solve 
     void solve();
     
-    const std::vector<std::tuple<std::string, std::string>> output() const {
+    const std::vector<std::tuple<std::string, std::string>> best() const {
         if(state == nullptr) {
             throw std::runtime_error("State not initialized");
         }

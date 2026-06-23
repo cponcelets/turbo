@@ -468,8 +468,8 @@ void barebones_dive_and_solve(CP<Itv>& cp) {
   /** We start with some preprocessing to reduce the number of variables and constraints. */
   cp.preprocess();
   if(cp.iprop->is_bot()) {
-    cp.print_final_solution();
-    cp.print_mzn_statistics();
+    //cp.print_final_solution();
+    //cp.print_mzn_statistics();
     return;
   }
   MemoryConfig mem_config = configure_gpu_barebones(cp);
@@ -498,9 +498,9 @@ void barebones_dive_and_solve(CP<Itv>& cp) {
     if(uroot.stats.timers.time_of(Timer::FIRST_BLOCK_IDLE) != 0) {
       uroot.stats.timers.time_of(Timer::FIRST_BLOCK_IDLE) += time_to_kernel_start;
     }
-    cp.print_solution(*uroot.best);
+    //cp.print_solution(*uroot.best);
   }
-  uroot.stats.print_mzn_final_separator();
+  //uroot.stats.print_mzn_final_separator();
   if(uroot.config.print_statistics) {
     uroot.config.print_mzn_statistics();
     uroot.stats.print_mzn_statistics(uroot.config.verbose_solving);
@@ -509,6 +509,7 @@ void barebones_dive_and_solve(CP<Itv>& cp) {
     }
     unified_data->root.stats.print_mzn_end_stats();
   }
+  cp.meet(uroot);
   deallocate_global_data<<<1,1>>>(grid_data.get());
   CUDAEX(cudaDeviceSynchronize());
 }

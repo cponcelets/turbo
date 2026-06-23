@@ -13,6 +13,6 @@ PYBIND11_MODULE(turbo_python, m) {
     pybind11::class_<PythonInstance>(m, "Turbo")
     .def(pybind11::init<const std::vector<std::string>&>())
     .def("solve", &PythonInstance::solve)
-    .def("output", &PythonInstance::output)
+    .def("best", &PythonInstance::best)
     .def("stats", &PythonInstance::stats);
 }
