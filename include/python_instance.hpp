@@ -20,17 +20,17 @@ struct PythonInstance {
     //Launch a solve 
     void solve();
     
-    const std::vector<std::tuple<std::string, std::string>> best() const {
+    const std::vector<std::tuple<std::string, bound_value_type>> best() const {
         if(state == nullptr) {
             throw std::runtime_error("State not initialized");
         }
-        std::vector<std::tuple<std::string, std::string>> result;
-        
+        std::vector<std::tuple<std::string, bound_value_type>> result;
+
         const auto& vars = state->solver_output.get_output_vars();
         for(int i = 0; i < vars.size(); ++i) {
             result.emplace_back(
                 vars[i].data(),
-                state->solver_output.var_to_string(vars[i], state->env, *state->best, *state->simplifier)
+                state->solver_output.get_value_of(vars[i], state->env, *state->best, *state->simplifier)
             );
         }
         return result;
