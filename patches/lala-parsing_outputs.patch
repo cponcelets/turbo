@@ -21,15 +21,15 @@ index cc9799c..1bedf28 100644
      case LT: return lala::LT;
      case LE: return lala::LEQ;
 diff --git a/include/lala/solver_output.hpp b/include/lala/solver_output.hpp
-index 228cd71..708752b 100644
+index 228cd71..6eacd3d 100644
 --- a/include/lala/solver_output.hpp
 +++ b/include/lala/solver_output.hpp
 @@ -97,6 +97,10 @@ public:
      output_vars.push_back(var_name);
    }
  
-+  const bvector<bstring>& get_output_vars() const {
-+    return output_vars;
++  const auto get_output_vars() const {
++    return battery::tuple(output_vars, output_arrays);
 +  }
 +
    class SimplifierIdentity {
