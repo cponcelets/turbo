@@ -321,12 +321,11 @@ struct Statistics {
     print_stat(name.c_str(), s.c_str());
   }
 
-private:
-  CUDA double to_sec(int64_t dur) const {
+public:
+CUDA double to_sec(int64_t dur) const {
     return (static_cast<double>(dur / 1000 / 1000) / 1000.);
   }
-
-public:
+  
   CUDA void print_block_timing_stat(const char* name, Timer timer) const {
     print_stat(name, to_sec(timers.time_of(timer) / num_blocks));
   }
@@ -368,48 +367,6 @@ public:
     print_block_timing_stat("dive_time", Timer::DIVE);
     print_timing_stat("best_obj_time", Timer::LATEST_BEST_OBJ_FOUND);
     print_timing_stat("first_block_idle_time", Timer::FIRST_BLOCK_IDLE);
-  }
-
-  using StatValue =
-    std::variant<bool, size_t, int, long long, double, std::string>;
-
-  CUDA std::unordered_map<std::string, StatValue> get_mzn_statistics(int verbose = 0) const {
-    return {
-      {"num_blocks", num_blocks},
-      {"nodes", nodes},
-      {"failures", fails},
-      {"variables", variables},
-      {"propagators", constraints},
-      {"optimization", optimization},
-      {"peakDepth", depth_max},
-      {"initTime", to_sec(timers.time_of(Timer::PREPROCESSING))},
-      {"solveTime", to_sec(timers.time_of(Timer::OVERALL))},
-      {"num_solutions", solutions},
-      {"exhaustive", exhaustive},
-      {"eps_num_subproblems", eps_num_subproblems},
-      {"eps_solved_subproblems", eps_solved_subproblems},
-      {"eps_skipped_subproblems", eps_skipped_subproblems},
-      {"num_blocks_done", num_blocks_done},
-      {"fixpoint_iterations", fixpoint_iterations},
-      {"num_deductions", num_deductions},
-
-      // Timing statistics
-      {"cumulative_time_block_sec", to_sec(cumulative_time_block)},
-      {"deductions_per_block_second", num_deductions / num_blocks / to_sec(cumulative_time_block)},
-      {"solve_time", to_sec(timers.time_of(Timer::OVERALL) / num_blocks)},
-      {"search_time", to_sec(timers.time_of(Timer::SEARCH) / num_blocks)},
-      // print_block_timing_stat("split_time", Timer::SPLIT);
-      // print_block_timing_stat("push_time", Timer::PUSH);
-      // print_block_timing_stat("pop_time", Timer::POP);
-      {"fixpoint_time", to_sec(timers.time_of(Timer::FIXPOINT) / num_blocks)},
-      {"transfer_cpu2gpu_time", to_sec(timers.time_of(Timer::TRANSFER_CPU2GPU) / num_blocks)},
-      {"transfer_gpu2cpu_time", to_sec(timers.time_of(Timer::TRANSFER_GPU2CPU) / num_blocks)},
-      {"select_fp_functions_time", to_sec(timers.time_of(Timer::SELECT_FP_FUNCTIONS) / num_blocks)},
-      {"wait_cpu_time", to_sec(timers.time_of(Timer::WAIT_CPU) / num_blocks)},
-      {"dive_time", to_sec(timers.time_of(Timer::DIVE) / num_blocks)},
-      {"best_obj_time", to_sec(timers.time_of(Timer::LATEST_BEST_OBJ_FOUND))},
-      {"first_block_idle_time", to_sec(timers.time_of(Timer::FIRST_BLOCK_IDLE))}
-    };
   }
 
   CUDA void print_mzn_end_stats() const {

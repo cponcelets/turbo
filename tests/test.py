@@ -22,7 +22,7 @@ solver = turbo_python.Turbo(["-a", "-t", "20000", "benchmarks/mini_example.fzn"]
 solver.solve()
 
 print_mzn_final_separator(solver.stats())
-print("With:");
+print("With best solution:");
 print(solver.best());
 
 print("Stats:");
