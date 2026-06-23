@@ -19,4 +19,5 @@ constraint int_lin_ne(X_INTRODUCED_0_,[sa,nsw],0);
 constraint int_lin_ne(X_INTRODUCED_0_,[sa,v],0);
 constraint int_lin_ne(X_INTRODUCED_0_,[q,nsw],0);
 constraint int_lin_ne(X_INTRODUCED_0_,[nsw,v],0);
-solve  satisfy;
+
+solve  minimize wa;
