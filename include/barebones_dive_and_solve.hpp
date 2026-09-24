@@ -32,7 +32,9 @@ namespace bt = ::battery;
 #ifdef __CUDACC__
 
 #include <cuda/std/chrono>
+#include <cuda/std/limits>
 #include <cuda/semaphore>
+#include <cuda/atomic>
 
 #endif
 
@@ -425,6 +427,9 @@ struct GridData {
    */
   UB appx_best_bound;
 
+  /** The number of solutions found so far across all blocks (only used for satisfaction problems with `stop_after_n_solutions != 0`). */
+  cuda::atomic<size_t, cuda::thread_scope_device> num_solutions;
+
   /** Due to multithreading, we must protect `stdout` when printing.
    * The model of computation in this work is lock-free, but it seems unavoidable for printing.
   */
@@ -445,6 +450,7 @@ struct GridData {
   __device__ GridData(const GridCP& root)
    : blocks(root.stats.num_blocks)
    , next_subproblem(root.stats.num_blocks)
+   , num_solutions(0)
    , print_lock(1)
    , has_eps_strategy(root.config.eps_var_order != "default")
    , search_strategies(root.split->strategies_())
@@ -457,7 +463,7 @@ __global__ void initialize_global_data(UnifiedData*, bt::unique_ptr<GridData, bt
 __global__ void gpu_barebones_solve(UnifiedData*, GridData*);
 template <class FPEngine>
 __device__ INLINE void propagate(UnifiedData& unified_data, GridData& grid_data, BlockData& block_data,
-   FPEngine& fp_engine, bool& stop, bool& has_changed, bool& is_leaf_node);
+   FPEngine& fp_engine, bool& stop, bool& has_changed, bool& is_leaf_node, bool record_solution);
 __global__ void reduce_blocks(UnifiedData*, GridData*);
 __global__ void deallocate_global_data(bt::unique_ptr<GridData, bt::global_allocator>*);
 
@@ -475,6 +481,17 @@ void barebones_dive_and_solve(CP<Itv>& cp) {
   MemoryConfig mem_config = configure_gpu_barebones(cp);
   auto unified_data = bt::make_unique<UnifiedData, ConcurrentAllocator>(cp, mem_config);
   auto grid_data = bt::make_unique<bt::unique_ptr<GridData, bt::global_allocator>, ConcurrentAllocator>();
+  /** `GridData` lives in the device heap, which is not released until the process ends.
+   * This guard deallocates it if we leave this function early (e.g., an exception), which matters when `solve` is called several times from Python. */
+  struct GridDataGuard {
+    bt::unique_ptr<GridData, bt::global_allocator>* grid_data;
+    ~GridDataGuard() {
+      if(grid_data != nullptr) {
+        deallocate_global_data<<<1,1>>>(grid_data);
+        cudaDeviceSynchronize();
+      }
+    }
+  } grid_data_guard{grid_data.get()};
   initialize_global_data<<<1,1>>>(unified_data.get(), grid_data.get());
   CUDAEX(cudaDeviceSynchronize());
   /** We wait that either the solving is interrupted, or that all threads have finished. */
@@ -509,7 +526,15 @@ void barebones_dive_and_solve(CP<Itv>& cp) {
     }
     unified_data->root.stats.print_mzn_end_stats();
   }
+  /** reset `cp.stats` before merging, otherwise the statistics of `cp` (e.g., preprocessing time) would be counted twice. */
+  cp.stats.reset_accumulated();
+  cp.stats.eps_num_subproblems = uroot.stats.eps_num_subproblems;
+  /** `cp.meet` only retrieves the best solution of optimization problems. */
+  if(uroot.bab->is_satisfaction() && uroot.stats.solutions > 0) {
+    uroot.best->extract(*cp.best);
+  }
   cp.meet(uroot);
+  grid_data_guard.grid_data = nullptr;
   deallocate_global_data<<<1,1>>>(grid_data.get());
   CUDAEX(cudaDeviceSynchronize());
 }
@@ -682,7 +707,11 @@ __global__ void gpu_barebones_solve(UnifiedData* unified_data, GridData* grid_da
     __syncthreads();
     while(remaining_depth > 0 && !is_leaf_node && !stop) {
       __syncthreads();
-      propagate(*unified_data, *grid_data, block_data, fp_engine, stop, has_changed, is_leaf_node);
+      /** When diving, the current node is the root of a subtree containing `2^remaining_depth` subproblems.
+       * If this node is a solution, all the blocks solving one of these subproblems reach it.
+       * Similarly to skipped subproblems (see E.), only the block solving the left most subproblem records the solution, otherwise it would be counted several times. */
+      bool record_solution = (block_data.subproblem_idx & ((size_t{1} << remaining_depth) - size_t{1})) == size_t{0};
+      propagate(*unified_data, *grid_data, block_data, fp_engine, stop, has_changed, is_leaf_node, record_solution);
       __syncthreads();
       if(!is_leaf_node) {
         block_data.split(has_changed, grid_data->search_strategies);
@@ -777,7 +806,7 @@ __global__ void gpu_barebones_solve(UnifiedData* unified_data, GridData* grid_da
         }
 
         // II. Propagate the current node.
-        propagate(*unified_data, *grid_data, block_data, fp_engine, stop, has_changed, is_leaf_node);
+        propagate(*unified_data, *grid_data, block_data, fp_engine, stop, has_changed, is_leaf_node, true);
         __syncthreads();
 
         // III. Branching
@@ -904,10 +933,12 @@ __global__ void gpu_barebones_solve(UnifiedData* unified_data, GridData* grid_da
 
 template <class FPEngine>
 __device__ INLINE void propagate(UnifiedData& unified_data, GridData& grid_data, BlockData& block_data,
-   FPEngine& fp_engine, bool& stop, bool& has_changed, bool& is_leaf_node)
+   FPEngine& fp_engine, bool& stop, bool& has_changed, bool& is_leaf_node, bool record_solution)
 {
   __shared__ int warp_iterations[CUDA_THREADS_PER_BLOCK/32];
   warp_iterations[threadIdx.x / 32] = 0;
+  /** `best_bound` is only modified by thread 0 at a solution node (end of this function), and the caller synchronizes after `propagate`, so all threads read the same value here. */
+  auto best_bound_snapshot = block_data.best_bound.value();
   auto& config = unified_data.root.config;
   IProp& iprop = *block_data.iprop;
   auto group = cooperative_groups::this_thread_block();
@@ -990,23 +1021,49 @@ __device__ INLINE void propagate(UnifiedData& unified_data, GridData& grid_data,
     /** Whenever we reach a solution node, we must have a bound better than the best bound of the local block.
      * Note that it doesn't mean the best bound of the block must be the best bound of the grid.
      * It is to prevent copying a store with a worst bound into `best_store`.
+     * All threads compare against `best_bound_snapshot` (read at the beginning of `propagate`, before the barriers of the fixpoint) and not `best_bound` itself, which is updated by thread 0 below.
+     * Hence all threads take the same decision without an additional `__syncthreads()`, and no thread skips its part of the copy.
      */
     if(num_active == 0) {
       is_leaf_node = true;
-      if(block_data.best_bound.value() > block_data.store->project(grid_data.obj_var).lb().value()) {
-        if(threadIdx.x == 0) {
-          block_data.best_bound.meet(Itv::UB(block_data.store->project(grid_data.obj_var).lb().value()));
-          grid_data.appx_best_bound.meet(block_data.best_bound);
-          block_data.stats.timers.update_timer(Timer::LATEST_BEST_OBJ_FOUND, block_data.start_time);
-        }
+      /** A solution reached while diving is only recorded by one block (see `record_solution` in the dive loop). */
+      if(record_solution && grid_data.obj_var.is_untyped()) {
+        /** Satisfaction problem: every solution is copied into `best_store`, and counted until `stop_after_n_solutions` is reached.
+         * With `-a` (stop_after_n_solutions == 0), no atomic is needed.
+         * Otherwise, the atomic counter is used at most `stop_after_n_solutions + num_blocks` times, since solving stops afterwards. */
         block_data.store->copy_to(group, *block_data.best_store);
         if(threadIdx.x == 0) {
-          block_data.stats.solutions++;
-          if(config.verbose_solving >= 2) {
-            grid_data.print_lock.acquire();
-            printf("%% objective="); block_data.best_bound.print(); printf("\n");
-            grid_data.print_lock.release();
+          size_t n = config.stop_after_n_solutions;
+          size_t sol_idx = n == 0 ? 0 : grid_data.num_solutions.fetch_add(1);
+          if(n == 0 || sol_idx < n) {
+            block_data.stats.solutions++;
+            block_data.stats.timers.update_timer(Timer::LATEST_BEST_OBJ_FOUND, block_data.start_time);
           }
+          if(n != 0 && sol_idx + 1 >= n) {
+            stop = true;
+            unified_data.stop.test_and_set();
+          }
+        }
+      }
+      else if(record_solution) {
+        auto obj = block_data.store->project(grid_data.obj_var).lb().value();
+        if(best_bound_snapshot > obj) {
+          if(threadIdx.x == 0) {
+            block_data.best_bound.meet(Itv::UB(obj));
+            /** We only count the solutions improving the bound shared among blocks, as a sequential branch-and-bound would do.
+             * Otherwise, the solutions of equal objective found concurrently by several blocks would all be counted.
+             * `meet` is not an atomic read-modify-write, so two blocks improving the bound to the same value at the same time might both count their solution: the count is an upper approximation. */
+            if(grid_data.appx_best_bound.meet(block_data.best_bound)) {
+              block_data.stats.solutions++;
+            }
+            block_data.stats.timers.update_timer(Timer::LATEST_BEST_OBJ_FOUND, block_data.start_time);
+            if(config.verbose_solving >= 2) {
+              grid_data.print_lock.acquire();
+              printf("%% objective="); block_data.best_bound.print(); printf("\n");
+              grid_data.print_lock.release();
+            }
+          }
+          block_data.store->copy_to(group, *block_data.best_store);
         }
       }
     }
@@ -1034,27 +1091,32 @@ __device__ INLINE void propagate(UnifiedData& unified_data, GridData& grid_data,
 
 __global__ void reduce_blocks(UnifiedData* unified_data, GridData* grid_data) {
   auto& root = unified_data->root;
+  /** `meet` sums the timers, but for FIRST_BLOCK_IDLE we want the minimum among all blocks. */
+  int64_t first_block_idle = cuda::std::numeric_limits<int64_t>::max();
   for(int i = 0; i < grid_data->blocks.size(); ++i) {
     root.stats.meet(grid_data->blocks[i].stats);
-    int64_t& grid_first_block_idle = root.stats.timers.time_of(Timer::FIRST_BLOCK_IDLE);
-    int64_t block_idle = grid_data->blocks[i].stats.timers.time_of(Timer::FIRST_BLOCK_IDLE);
-    if(grid_first_block_idle > block_idle) {
-      grid_first_block_idle = block_idle;
-    }
+    first_block_idle = battery::min(first_block_idle, grid_data->blocks[i].stats.timers.time_of(Timer::FIRST_BLOCK_IDLE));
+  }
+  if(grid_data->blocks.size() > 0) {
+    root.stats.timers.time_of(Timer::FIRST_BLOCK_IDLE) = first_block_idle;
   }
   int best_block_idx = 0;
+  int sat_block_idx = -1;
   for(int i = 0; i < grid_data->blocks.size(); ++i) {
     auto& block = grid_data->blocks[i];
     if(block.stats.solutions > 0) {
+      int64_t& grid_best_time = root.stats.timers.time_of(Timer::LATEST_BEST_OBJ_FOUND);
+      int64_t block_best_time = block.stats.timers.time_of(Timer::LATEST_BEST_OBJ_FOUND);
       if(root.bab->is_satisfaction()) {
-        block.best_store->extract(*root.best);
-        break;
+        /** We keep the solution of the block which found its last solution first. */
+        if(sat_block_idx == -1 || block_best_time < grid_best_time) {
+          grid_best_time = block_best_time;
+          sat_block_idx = i;
+        }
       }
       else {
         bool equal_bound = (grid_data->appx_best_bound == block.best_bound);
         bool is_better = grid_data->appx_best_bound.meet(block.best_bound);
-        int64_t& grid_best_time = root.stats.timers.time_of(Timer::LATEST_BEST_OBJ_FOUND);
-        int64_t block_best_time = block.stats.timers.time_of(Timer::LATEST_BEST_OBJ_FOUND);
         if(is_better || (equal_bound && block_best_time <= grid_best_time)) {
           grid_best_time = block_best_time;
           best_block_idx = i;
@@ -1062,8 +1124,11 @@ __global__ void reduce_blocks(UnifiedData* unified_data, GridData* grid_data) {
       }
     }
   }
+  if(sat_block_idx != -1) {
+    grid_data->blocks[sat_block_idx].best_store->extract(*root.best);
+  }
   // If we found a bound, we copy the best store into the unified data.
-  if(!grid_data->appx_best_bound.is_top()) {
+  else if(!grid_data->appx_best_bound.is_top()) {
     grid_data->blocks[best_block_idx].best_store->copy_to(*root.best);
   }
 }
