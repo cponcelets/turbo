@@ -279,14 +279,13 @@ __global__ void gpu_propagate(GPUCube* cube, size_t shared_bytes);
 #endif // __CUDACC__
 
 /** This is the point of entry, we preprocess the problem, create the threads solving the problem, wait for their completion or an interruption, merge and print the statistics. */
-void hybrid_dive_and_solve(const Configuration<battery::standard_allocator>& config)
+void hybrid_dive_and_solve(CP<Itv>& cp)
 {
 #ifndef __CUDACC__
   std::cerr << "You must use a CUDA compiler (nvcc or clang) to compile Turbo on GPU." << std::endl;
 #else
   auto start = std::chrono::steady_clock::now();
   /** We start with some preprocessing to reduce the number of variables and constraints. */
-  CP<Itv> cp(config);
   cp.preprocess();
   if(cp.iprop->is_bot()) {
     cp.print_final_solution();

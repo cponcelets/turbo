@@ -1,0 +1,89 @@
+diff --git a/include/lala/logic/algorithm.hpp b/include/lala/logic/algorithm.hpp
+index d782312..c657b2e 100644
+--- a/include/lala/logic/algorithm.hpp
++++ b/include/lala/logic/algorithm.hpp
+@@ -382,7 +382,7 @@ CUDA NI std::optional<F> negate(const F& f) {
+   return {};
+ }
+ 
+-CUDA Sig negate_arithmetic_comparison(Sig sig) {
++inline CUDA Sig negate_arithmetic_comparison(Sig sig) {
+   switch(sig) {
+     case EQ: return NEQ;
+     case NEQ: return EQ;
+diff --git a/include/lala/logic/sort.hpp b/include/lala/logic/sort.hpp
+index f7cc86b..f15eaac 100644
+--- a/include/lala/logic/sort.hpp
++++ b/include/lala/logic/sort.hpp
+@@ -92,6 +92,21 @@ struct Sort {
+       u.lb().print();
+     }
+   }
++
++  template <class U>
++  CUDA NI std::string to_string(const U& u) const {
++    if(is_bool()) {
++      if(u <= U::eq_zero()) {
++       return "false";
++      }
++      else {
++       return "true";
++      }
++    }
++    else {
++      return u.lb().to_string();
++    }
++  }
+ };
+ 
+ template <class Alloc1, class Alloc2>
+diff --git a/include/lala/simplifier.hpp b/include/lala/simplifier.hpp
+index e11aaa6..d63ba49 100644
+--- a/include/lala/simplifier.hpp
++++ b/include/lala/simplifier.hpp
+@@ -252,6 +252,22 @@ public:
+     }
+   }
+ 
++    template <class Alloc, class Abs, class Env>
++  CUDA std::string string_variable(const LVar<Alloc>& vname, const Env& benv, const Abs& b) const {
++    assert(env.variable_of(vname).has_value());
++    const auto& local_var = env.variable_of(vname)->get();
++    assert(local_var.avar_of(store_aty).has_value());
++    int rep = equivalence_classes[local_var.avar_of(store_aty)->vid()];
++    const auto& rep_name = env.name_of(AVar{store_aty, rep});
++    auto benv_variable = benv.variable_of(rep_name);
++    if(benv_variable.has_value()) {
++      return benv_variable->get().sort.to_string(b.project(benv_variable->get().avars[0]));
++    }
++    else {
++      return local_var.sort.to_string(constants[rep]);
++    }
++  }
++
+ private:
+   /** \return `true` if mask[i] was changed. */
+   CUDA local::B eliminate(battery::dynamic_bitset<memory_type, allocator_type>& mask, size_t i) {
+diff --git a/include/lala/universes/arith_bound.hpp b/include/lala/universes/arith_bound.hpp
+index 61b66ef..3e69f63 100644
+--- a/include/lala/universes/arith_bound.hpp
++++ b/include/lala/universes/arith_bound.hpp
+@@ -287,6 +287,18 @@ public:
+     return true;
+   }
+ 
++  CUDA NI std::string to_string() const {
++    if(is_bot()) {
++      return "\u22A5";
++    }
++    else if(is_top()) {
++      return "\u22A4";
++    }
++    else {
++      return std::to_string(value());
++    }
++  }
++
+   /** Print the current element. */
+   CUDA NI void print() const {
+     if(is_bot()) {

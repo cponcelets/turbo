@@ -125,13 +125,20 @@ public:
   }
 };
 
-Configuration<battery::standard_allocator> parse_args(int argc, char** argv) {
+Configuration<battery::standard_allocator> parse_args(const std::vector<std::string>& args) {
   Configuration<battery::standard_allocator> config;
-  InputParser input(argc, argv);
+
+  std::vector<char*> argv;
+  argv.reserve(args.size());
+  for(const auto& s : args)
+    argv.push_back(const_cast<char*>(s.c_str()));
+  int argc = argv.size();
+
+  InputParser input(argc, argv.data());
 
   if(input.cmdOptionExists("-or") && input.cmdOptionExists("-p")) {
     std::cerr << "The options -or and -p cannot be used at the same time" << std::endl;
-    usage_and_exit(argv[0]);
+    usage_and_exit(argv.at(0));
   }
   input.read_int("-sub", config.subproblems_power);
   input.read_size_t("-subfactor", config.subproblems_factor);

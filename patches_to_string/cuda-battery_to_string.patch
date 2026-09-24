@@ -1,0 +1,113 @@
+diff --git a/include/battery/string.hpp b/include/battery/string.hpp
+index 5e0bceb..5db2078 100644
+--- a/include/battery/string.hpp
++++ b/include/battery/string.hpp
+@@ -4,6 +4,7 @@
+ #define CUDA_BATTERY_STRING_HPP
+ 
+ #include <string>
++#include <format>
+ #include "utility.hpp"
+ #include "vector.hpp"
+ 
+@@ -67,6 +68,10 @@ public:
+   CUDA char* data() { return data_.data(); }
+   CUDA const char* data() const { return data_.data(); }
+ 
++  CUDA NI std::string to_string() const {
++    return std::format("%s", data());
++  }
++
+   CUDA NI void print() const {
+     printf("%s", data());
+   }
+diff --git a/include/battery/utility.hpp b/include/battery/utility.hpp
+index f1c1ee2..ec44316 100644
+--- a/include/battery/utility.hpp
++++ b/include/battery/utility.hpp
+@@ -3,6 +3,8 @@
+ #ifndef CUDA_BATTERY_UTILITY_HPP
+ #define CUDA_BATTERY_UTILITY_HPP
+ 
++#include <string>
++#include <format>
+ #include <cstdio>
+ #include <cassert>
+ #include <limits>
+@@ -742,24 +744,38 @@ CUDA constexpr T emod(T x, T y) {
+   return x % y + y * ((x % y >= 0) ? 0 : battery::signum(y));
+ }
+ 
++template<typename T>
++CUDA NI std::string to_string(const T& t) {
++  return t.to_string();
++}
++
++template<> CUDA NI inline std::string to_string(const bool &x) { return x ? "true" : "false"; }
++template<> CUDA NI inline std::string to_string(const char &x) { return std::format("{}", x); }
++template<> CUDA NI inline std::string to_string(const short &x) { return std::format("{}", (int)x); }
++template<> CUDA NI inline std::string to_string(const int &x) { return std::format("{}", x); }
++template<> CUDA NI inline std::string to_string(const long long int &x) { return std::format("{}", x); }
++template<> CUDA NI inline std::string to_string(const long int &x) { return std::format("{}", x); }
++template<> CUDA NI inline std::string to_string(const unsigned char &x) { return std::format("{}", (int)x); }
++template<> CUDA NI inline std::string to_string(const unsigned short &x) { return std::format("{}", (int)x); }
++template<> CUDA NI inline std::string to_string(const unsigned int &x) { return std::format("{}", x); }
++template<> CUDA NI inline std::string to_string(const unsigned long &x) { return std::format("{}", x); }
++template<> CUDA NI inline std::string to_string(const unsigned long long &x) { return std::format("{}", x); }
++template<> CUDA NI inline std::string to_string(const float &x) { return std::format("{}", x); }
++template<> CUDA NI inline std::string to_string(const double &x) { return std::format("{}", x); }
++template<> CUDA NI inline std::string to_string(char const* const &x) { return std::format("{}", x); }
++
+ template<typename T>
+ CUDA NI void print(const T& t) {
+-  t.print();
+-}
+-template<> CUDA NI inline void print(const bool &x) { x ? printf("true") : printf("false"); }
+-template<> CUDA NI inline void print(const char &x) { printf("%c", x); }
+-template<> CUDA NI inline void print(const short &x) { printf("%d", (int)x); }
+-template<> CUDA NI inline void print(const int &x) { printf("%d", x); }
+-template<> CUDA NI inline void print(const long long int &x) { printf("%lld", x); }
+-template<> CUDA NI inline void print(const long int &x) { printf("%ld", x); }
+-template<> CUDA NI inline void print(const unsigned char &x) { printf("%d", (int)x); }
+-template<> CUDA NI inline void print(const unsigned short &x) { printf("%d", (int)x); }
+-template<> CUDA NI inline void print(const unsigned int &x) { printf("%u", x); }
+-template<> CUDA NI inline void print(const unsigned long &x) { printf("%lu", x); }
+-template<> CUDA NI inline void print(const unsigned long long &x) { printf("%llu", x); }
+-template<> CUDA NI inline void print(const float &x) { printf("%f", x); }
+-template<> CUDA NI inline void print(const double &x) { printf("%lf", x); }
+-template<> CUDA NI inline void print(char const* const &x) { printf("%s", x); }
++  if constexpr(std::is_arithmetic_v<T>)
++    {
++      auto s = to_string(t);
++      printf("%s", s.c_str());
++    }
++    else
++    {
++      printf("%s", t.to_string());
++    }
++}
+ 
+ } // namespace battery
+ 
+diff --git a/include/battery/vector.hpp b/include/battery/vector.hpp
+index bc6c3d8..19c243d 100644
+--- a/include/battery/vector.hpp
++++ b/include/battery/vector.hpp
+@@ -334,6 +334,17 @@ public:
+       }
+     }
+   }
++
++  CUDA NI std::string to_string() const {
++    std::string out;
++    for(size_t i = 0; i < n; ++i) {
++      out.append(::battery::to_string(data_[i]));
++      if(i < n - 1) {
++        out.append(", ");
++      }
++    }
++    return out;
++  }
+ };
+ 
+ template<class T1, class Alloc1, class T2, class Alloc2>

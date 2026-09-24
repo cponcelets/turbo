@@ -677,14 +677,13 @@ void configure_and_run(CP<U>& root, const Timepoint& start) {
 
 #endif // __CUDACC__
 
-void gpu_dive_and_solve(Configuration<bt::standard_allocator>& config) {
+void gpu_dive_and_solve(CP<Itv>& root) {
 #ifndef __CUDACC__
-  std::cerr << "You must use a CUDA compiler (nvcc or clang) to compile Turbo on GPU." << std::endl;
+  throw std::runtime_error("You must use a CUDA compiler (nvcc or clang) to compile Turbo on GPU.");
 #else
   check_support_managed_memory();
   check_support_concurrent_managed_memory();
   auto start = std::chrono::steady_clock::now();
-  CP<Itv> root(config);
   root.preprocess();
   if(root.iprop->is_bot()) {
     root.print_final_solution();
