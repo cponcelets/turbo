@@ -463,7 +463,7 @@ __global__ void initialize_global_data(UnifiedData*, bt::unique_ptr<GridData, bt
 __global__ void gpu_barebones_solve(UnifiedData*, GridData*);
 template <class FPEngine>
 __device__ INLINE void propagate(UnifiedData& unified_data, GridData& grid_data, BlockData& block_data,
-   FPEngine& fp_engine, bool& stop, bool& has_changed, bool& is_leaf_node, bool record_solution);
+   FPEngine& fp_engine, bool& stop, bool& has_changed, bool& is_leaf_node, bool record_solution, bool diving);
 __global__ void reduce_blocks(UnifiedData*, GridData*);
 __global__ void deallocate_global_data(bt::unique_ptr<GridData, bt::global_allocator>*);
 
@@ -711,7 +711,7 @@ __global__ void gpu_barebones_solve(UnifiedData* unified_data, GridData* grid_da
        * If this node is a solution, all the blocks solving one of these subproblems reach it.
        * Similarly to skipped subproblems (see E.), only the block solving the left most subproblem records the solution, otherwise it would be counted several times. */
       bool record_solution = (block_data.subproblem_idx & ((size_t{1} << remaining_depth) - size_t{1})) == size_t{0};
-      propagate(*unified_data, *grid_data, block_data, fp_engine, stop, has_changed, is_leaf_node, record_solution);
+      propagate(*unified_data, *grid_data, block_data, fp_engine, stop, has_changed, is_leaf_node, record_solution, true);
       __syncthreads();
       if(!is_leaf_node) {
         block_data.split(has_changed, grid_data->search_strategies);
@@ -806,7 +806,7 @@ __global__ void gpu_barebones_solve(UnifiedData* unified_data, GridData* grid_da
         }
 
         // II. Propagate the current node.
-        propagate(*unified_data, *grid_data, block_data, fp_engine, stop, has_changed, is_leaf_node, true);
+        propagate(*unified_data, *grid_data, block_data, fp_engine, stop, has_changed, is_leaf_node, true, false);
         __syncthreads();
 
         // III. Branching
@@ -933,12 +933,11 @@ __global__ void gpu_barebones_solve(UnifiedData* unified_data, GridData* grid_da
 
 template <class FPEngine>
 __device__ INLINE void propagate(UnifiedData& unified_data, GridData& grid_data, BlockData& block_data,
-   FPEngine& fp_engine, bool& stop, bool& has_changed, bool& is_leaf_node, bool record_solution)
+   FPEngine& fp_engine, bool& stop, bool& has_changed, bool& is_leaf_node, bool record_solution, bool diving)
 {
   __shared__ int warp_iterations[CUDA_THREADS_PER_BLOCK/32];
   warp_iterations[threadIdx.x / 32] = 0;
-  /** `best_bound` is only modified by thread 0 at a solution node (end of this function), and the caller synchronizes after `propagate`, so all threads read the same value here. */
-  auto best_bound_snapshot = block_data.best_bound.value();
+  __shared__ bool new_best;
   auto& config = unified_data.root.config;
   IProp& iprop = *block_data.iprop;
   auto group = cooperative_groups::this_thread_block();
@@ -1021,8 +1020,6 @@ __device__ INLINE void propagate(UnifiedData& unified_data, GridData& grid_data,
     /** Whenever we reach a solution node, we must have a bound better than the best bound of the local block.
      * Note that it doesn't mean the best bound of the block must be the best bound of the grid.
      * It is to prevent copying a store with a worst bound into `best_store`.
-     * All threads compare against `best_bound_snapshot` (read at the beginning of `propagate`, before the barriers of the fixpoint) and not `best_bound` itself, which is updated by thread 0 below.
-     * Hence all threads take the same decision without an additional `__syncthreads()`, and no thread skips its part of the copy.
      */
     if(num_active == 0) {
       is_leaf_node = true;
@@ -1047,23 +1044,45 @@ __device__ INLINE void propagate(UnifiedData& unified_data, GridData& grid_data,
       }
       else if(record_solution) {
         auto obj = block_data.store->project(grid_data.obj_var).lb().value();
-        if(best_bound_snapshot > obj) {
+        /** Executed by thread 0 when `obj` improves `best_bound`. */
+        auto record_improvement = [&]() {
+          block_data.best_bound.meet(Itv::UB(obj));
+          /** We only count the solutions improving the bound shared among blocks, as a sequential branch-and-bound would do.
+           * Otherwise, the solutions of equal objective found concurrently by several blocks would all be counted.
+           * `meet` is not an atomic read-modify-write, so two blocks improving the bound to the same value at the same time might both count their solution: the count is an upper approximation. */
+          if(grid_data.appx_best_bound.meet(block_data.best_bound)) {
+            block_data.stats.solutions++;
+          }
+          block_data.stats.timers.update_timer(Timer::LATEST_BEST_OBJ_FOUND, block_data.start_time);
+          if(config.verbose_solving >= 2) {
+            grid_data.print_lock.acquire();
+            printf("%% objective="); block_data.best_bound.print(); printf("\n");
+            grid_data.print_lock.release();
+          }
+        };
+        if(!diving) {
+          /** When solving a subproblem, the objective is constrained by `best_bound - 1` before each propagation (see I. in `gpu_barebones_solve`).
+           * Hence a solution always improves `best_bound`: all threads copy the store without comparing, and there is no race with thread 0 updating `best_bound`. */
           if(threadIdx.x == 0) {
-            block_data.best_bound.meet(Itv::UB(obj));
-            /** We only count the solutions improving the bound shared among blocks, as a sequential branch-and-bound would do.
-             * Otherwise, the solutions of equal objective found concurrently by several blocks would all be counted.
-             * `meet` is not an atomic read-modify-write, so two blocks improving the bound to the same value at the same time might both count their solution: the count is an upper approximation. */
-            if(grid_data.appx_best_bound.meet(block_data.best_bound)) {
-              block_data.stats.solutions++;
-            }
-            block_data.stats.timers.update_timer(Timer::LATEST_BEST_OBJ_FOUND, block_data.start_time);
-            if(config.verbose_solving >= 2) {
-              grid_data.print_lock.acquire();
-              printf("%% objective="); block_data.best_bound.print(); printf("\n");
-              grid_data.print_lock.release();
-            }
+            assert(block_data.best_bound.value() > obj);
+            record_improvement();
           }
           block_data.store->copy_to(group, *block_data.best_store);
+        }
+        else {
+          /** When diving, the objective is not constrained, so the solution might be worse than `best_bound`.
+           * Thread 0 takes the decision and shares it, so all threads do their part of the copy (or none).
+           * It rarely happens: at most once per subtree skipped during the dive. */
+          if(threadIdx.x == 0) {
+            new_best = block_data.best_bound.value() > obj;
+            if(new_best) {
+              record_improvement();
+            }
+          }
+          __syncthreads();
+          if(new_best) {
+            block_data.store->copy_to(group, *block_data.best_store);
+          }
         }
       }
     }
