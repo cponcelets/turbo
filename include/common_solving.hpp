@@ -70,9 +70,27 @@ inline void signal_handler(int signum)
   }
 }
 
+static bool signal_handler_installed = false;
+
+/** Install `signal_handler` and reset `got_signal`.
+ * It can be called several times in the same process (e.g., from the Python API): the handler is only installed once, otherwise `prev_sigint` would point to `signal_handler` itself and the handler would call itself forever. */
 inline void block_signal_ctrlc() {
-  prev_sigint = std::signal(SIGINT, signal_handler);
-  prev_sigterm = std::signal(SIGTERM, signal_handler);
+  got_signal = false;
+  if(!signal_handler_installed) {
+    prev_sigint = std::signal(SIGINT, signal_handler);
+    prev_sigterm = std::signal(SIGTERM, signal_handler);
+    signal_handler_installed = true;
+  }
+}
+
+/** Restore the signal handlers installed before `block_signal_ctrlc`.
+ * Useful when Turbo is used as a library, so SIGINT and SIGTERM behave normally outside of solving. */
+inline void restore_signal_ctrlc() {
+  if(signal_handler_installed) {
+    std::signal(SIGINT, prev_sigint);
+    std::signal(SIGTERM, prev_sigterm);
+    signal_handler_installed = false;
+  }
 }
 
 template <class A>

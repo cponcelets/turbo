@@ -20,7 +20,7 @@ struct PythonInstance {
     //Launch a solve 
     void solve();
 
-    using bound_array_type = battery::vector<bound_value_type, battery::standard_allocator>;
+    using bound_array_type = std::vector<bound_value_type>;
     using output_value_type = std::variant<bound_value_type, bound_array_type>;
     
     const std::vector<std::tuple<std::string, output_value_type>> best() const {
@@ -42,7 +42,7 @@ struct PythonInstance {
             const auto& dims = battery::get<2>(output_arrays[i]);
             const auto& array_vars = battery::get<3>(output_arrays[i]);
 
-            auto array_vals = battery::vector<bound_value_type, battery::standard_allocator>(array_vars.size());
+            auto array_vals = bound_array_type(array_vars.size());
             for(int j = 0; j < array_vars.size(); ++j) {
                 array_vals[j] = state->solver_output.get_value_of(array_vars[j], state->env, *state->best, *state->simplifier);
             }

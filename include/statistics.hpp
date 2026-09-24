@@ -76,6 +76,12 @@ public:
     }
   }
 
+  CUDA void reset() {
+    for(int i = 0; i < timers_ns.size(); i++) {
+      timers_ns[i] = 0;
+    }
+  }
+
   CUDA int64_t time_ms_of(Timer timer) const {
     return timers_ns[static_cast<int>(timer)] / 1000 / 1000;
   }
@@ -198,6 +204,23 @@ struct Statistics {
   template <class Alloc>
   CUDA void meet(const TimingStatistics<Alloc>& other) {
     timers.meet(other);
+  }
+
+  /** Reset the statistics accumulated by `meet` to their initial values.
+   * The description of the problem (variables, constraints, optimization, num_blocks, eps_num_subproblems) is kept. */
+  CUDA void reset_accumulated() {
+    nodes = 0;
+    fails = 0;
+    solutions = 0;
+    depth_max = 0;
+    exhaustive = true;
+    eps_solved_subproblems = 0;
+    eps_skipped_subproblems = 0;
+    num_blocks_done = 0;
+    fixpoint_iterations = 0;
+    num_deductions = 0;
+    cumulative_time_block = 0;
+    timers.reset();
   }
 
 #ifdef __CUDACC__
