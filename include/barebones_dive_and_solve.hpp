@@ -549,6 +549,8 @@ MemoryConfig configure_gpu_barebones(CP<Itv>& cp) {
     while((1 << cp.config.subproblems_power) < cp.config.subproblems_factor * cp.stats.num_blocks) {
       cp.config.subproblems_power++;
     }
+    /** The constructor of `CP` only sets it when `subproblems_power` is given by the user. */
+    cp.stats.eps_num_subproblems = size_t{1} << cp.config.subproblems_power;
   }
 
   /** III. Size of the heap global memory.
